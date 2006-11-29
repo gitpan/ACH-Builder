@@ -5,7 +5,7 @@ use warnings;
 
 use POSIX qw( strftime );
 
-our $VERSION = '0.01';
+our $VERSION = '0.02';
 
 #-------------------------------------------------
 # new( $file ? )
@@ -614,7 +614,7 @@ ACH::Builder - Tools for Building ACH (Automated Clearing House) Files
         
   } );
 
-  # I've included some sample detail records for dem 
+  # I've included some sample detail records 
   my @samples = $ach->sample_detail_records();
   
   # build file header record
@@ -629,7 +629,7 @@ ACH::Builder - Tools for Building ACH (Automated Clearing House) Files
   $ach->make_batch( \@samples );
 
   # build file control record
-  $ach->make_file_control_record( $format ) );
+  $ach->make_file_control_record();
 
   print $ach->to_string;
   
@@ -695,23 +695,23 @@ params: Hash Ref { company_id => '...', company_note ... }
 =item make_file_header_record
 
 Called to create the File Header record. This should be called before
-L<make_batch>.
+"make_batch".
 
 =item make_file_control_record
 
 Called to create the File Control Record. This should be called after 
-L<make_batch>.
+"make_batch".
 
 =item make_batch
 
 params: AoH Records
 
 Called the create and stash a batch of ACH entries. This method requires
-an AoH records. See L<sample_detail_records> from record specifications.
+an AoH records. See "sample_detail_records" from record specifications.
 
 =item format_rules
 
-Hash of ACH format rules needed by Text::FixedLength::Extra
+Hash of ACH format rules.
 
 =item sample_detail_records
 

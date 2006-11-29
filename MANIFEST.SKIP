@@ -24,6 +24,7 @@
 \#$
 \b\.#
 \.swp$
+\.svn
 
 # Avoid inline's dropings
 _Inline
