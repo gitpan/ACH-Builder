@@ -1,5 +1,6 @@
 use strict;
 use Test::More;
+use POSIX qw( strftime );
 
 BEGIN {
     eval{ require ACH::Builder; };
@@ -52,7 +53,8 @@ is_deeply(
     '__RECORD_SIZE__'           => 94,
     '__BLOCKING_FACTOR__'       => 10,
     '__FORMAT_CODE__'           => 1,
-    '__ACH_DATA__'              => [],    
+    '__ACH_DATA__'              => [],
+    '__EFFECTIVE_DATE__'        => strftime( "%y%m%d", localtime( time + 86400 ) ),    
     },
     'ACH Builder Object'
 );

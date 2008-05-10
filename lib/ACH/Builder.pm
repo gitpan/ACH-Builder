@@ -5,7 +5,7 @@ use warnings;
 
 use POSIX qw( strftime );
 
-our $VERSION = '0.02';
+our $VERSION = '0.03';
 
 #-------------------------------------------------
 # new( $file ? )
@@ -45,6 +45,7 @@ sub new {
 	$self->{__RECORD_SIZE__}           = $vars->{record_size}      || 94;
 	$self->{__BLOCKING_FACTOR__}       = $vars->{blocking_factor}  || 10;
 	$self->{__FORMAT_CODE__}           = $vars->{format_code}      || 1;
+	$self->{__EFFECTIVE_DATE__}        = $vars->{effective_date}   || strftime( "%y%m%d", localtime( time + 86400 ) );
 	
 	$self->{__ACH_DATA__}              = [];
 			
@@ -486,7 +487,7 @@ sub _make_batch_header_record {
         standard_entry_class_code => $self->{__ENTRY_CLASS_CODE__},
         company_entry_descr => $self->{__ENTRY_DESCRIPTION__},
         date                => strftime( "%y%m%d", localtime(time) ),
-        effective_date      => strftime( "%y%m%d", localtime(time) ),
+        effective_date      => $self->{__EFFECTIVE_DATE__},
         settlement_date     => '',
         origin_status_code  => '',
         origin_dfi_id       => '',
@@ -599,7 +600,7 @@ ACH::Builder - Tools for Building ACH (Automated Clearing House) Files
        
       # (required) a brief description of the nature of the 
       # payments this will apper on the receiver's bank statement
-      entry_description => 'TV-TELCOM'
+      entry_description => 'TV-TELCOM',
 
       # (required)
       destination       => '123123123',
@@ -611,6 +612,9 @@ ACH::Builder - Tools for Building ACH (Automated Clearing House) Files
       
       # (optional)
       company_note      => 'BILL',
+      
+      # (optional)
+      effective_date    => 'yymmdd',
         
   } );
 
