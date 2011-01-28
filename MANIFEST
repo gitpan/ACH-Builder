@@ -1,10 +1,9 @@
 Changes
-lib/ACH/Builder.pm
+MANIFEST
 Makefile.PL
-MANIFEST			This list of files
-MANIFEST.SKIP
 README
-t/02obj.t
-t/ACH-Builder.t
-
-META.yml                                 Module meta-data (added by MakeMaker)
+lib/ACH/Builder.pm
+t/00-load.t
+t/manifest.t
+t/pod-coverage.t
+t/pod.t

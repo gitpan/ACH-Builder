@@ -5,17 +5,17 @@ use warnings;
 
 use POSIX qw( strftime );
 
-our $VERSION = '0.03';
+our $VERSION = '0.04';
 
 #-------------------------------------------------
 # new( $file ? )
 #-------------------------------------------------
 sub new {
 	my ( $class, $vars ) = @_;
- 	
-	my $self = {};	
+
+	my $self = {};
 	bless( $self, $class );
-	
+
 	# set default values
     $self->{__BATCH_COUNT__}           = 0;
     $self->{__BLOCK_COUNT__}           = 0;
@@ -28,39 +28,41 @@ sub new {
     $self->{__BATCH_TOTAL_CREDIT__}    = 0;
     $self->{__BATCH_ENTRY_COUNT__}     = 0;
     $self->{__BATCH_ENTRY_HASH__}      = 0;
-	
+
 	$self->{__SERVICE_CLASS_CODE__}    = $vars->{service_class_code} || 200;
-	$self->{__IMMEDIATE_DEST_NAME__}   = $vars->{destination_name}; 
+	$self->{__IMMEDIATE_DEST_NAME__}   = $vars->{destination_name};
 	$self->{__IMMEDIATE_ORIGIN_NAME__} = $vars->{origination_name};
 	$self->{__IMMEDIATE_DEST__}        = $vars->{destination};
 	$self->{__IMMEDIATE_ORIGIN__}      = $vars->{origination};
-	    
+	$self->{__ORIGIN_STATUS_CODE__}    = $vars->{origin_status_code};
+	$self->{__ORIGINATING_DFI__}       = $vars->{originating_dfi} || substr $vars->{destination}, 0, 8;
+
 	$self->{__ENTRY_CLASS_CODE__}      = $vars->{entry_class_code} || 'PPD';
 	$self->{__ENTRY_DESCRIPTION__}     = $vars->{entry_description};
 	$self->{__COMPANY_ID__}            = $vars->{company_id};
 	$self->{__COMPANY_NAME__}          = $vars->{company_name};
 	$self->{__COMPANY_NOTE__}          = $vars->{company_note};
-	
+
 	$self->{__FILE_ID_MODIFIER__}      = $vars->{file_id_modifier} || 'A';
 	$self->{__RECORD_SIZE__}           = $vars->{record_size}      || 94;
 	$self->{__BLOCKING_FACTOR__}       = $vars->{blocking_factor}  || 10;
 	$self->{__FORMAT_CODE__}           = $vars->{format_code}      || 1;
 	$self->{__EFFECTIVE_DATE__}        = $vars->{effective_date}   || strftime( "%y%m%d", localtime( time + 86400 ) );
-	
+
 	$self->{__ACH_DATA__}              = [];
-			
+
 	# populate self with data from site
 	return( $self );
-	
+
 } # END new
 
 #-------------------------------------------------
 # to_string()
 #-------------------------------------------------
 sub to_string {
-    my $self = shift;    
+    my $self = shift;
     return( join( "\n", @{ $self->{__ACH_DATA__} } ) );
-    
+
 }
 
 #-------------------------------------------------
@@ -180,41 +182,54 @@ sub ach_data {
 #-------------------------------------------------
 sub make_batch {
     my( $self, $records ) = @_;
-    
+
     return if scalar( @{ $records } ) <= 0;
-    
+
     # bump the batch count
-    ++$self->{__BATCH_COUNT__}; 
+    ++$self->{__BATCH_COUNT__};
 
     # inititalize the batch variables
     $self->{__BATCH_TOTAL_DEBIT__}  = 0;
     $self->{__BATCH_TOTAL_CREDIT__} = 0;
     $self->{__BATCH_ENTRY_COUNT__}  = 0;
     $self->{__BATCH_ENTRY_HASH__}   = 0;
-            
+
     # get batch header
     $self->_make_batch_header_record();
 
     # loop over the detail records
     foreach my $record ( @{ $records } ) {
-        
-        # modify batch values 
-        $self->{__BATCH_TOTAL_DEBIT__} += $record->{amount};
+
+        if ($record->{transaction_code} == 27) {
+           #if it is a debit
+           $self->{__BATCH_TOTAL_DEBIT__} += $record->{amount};
+           $self->{__DEBIT_AMOUNT__} += $record->{amount};
+           #FIXME did he just put it in the wrong place?
+           $self->{__TOTAL_DEBIT__} += $record->{amount};
+
+        } elsif ($record->{transaction_code} == 22) {
+           #if it is a credit
+           $self->{__BATCH_TOTAL_CREDIT__} += $record->{amount};
+           $self->{__CREDIT_AMOUNT__} += $record->{amount};
+           #FIXME did he just put it in the wrong place?
+           $self->{__TOTAL_CREDIT__} += $record->{amount};
+        }
+
+        # modify batch values
         $self->{__BATCH_ENTRY_HASH__}  += $record->{routing_number};
         ++$self->{__BATCH_ENTRY_COUNT__};
 
         # modify file values
         $self->{__ENTRY_HASH__}  += $record->{routing_number};
-        $self->{__TOTAL_DEBIT__} += $record->{amount};
         ++$self->{__ENTRY_COUNT__};
-        
+
         # get detail record
-        $self->_make_detail_record( $record ) 
+        $self->_make_detail_record( $record )
     }
 
     # get batch control record
-    $self->_make_batch_control_record();    
-    
+    $self->_make_batch_control_record();
+
 }
 
 #-------------------------------------------------
@@ -222,7 +237,7 @@ sub make_batch {
 #-------------------------------------------------
 sub make_file_control_record {
     my( $self ) = @_;
-    
+
     my @def = qw(
        record_type
        batch_count
@@ -246,9 +261,9 @@ sub make_file_control_record {
     };
 
     # stash line
-    push( @{ $self->ach_data() }, 
-        fixedlength( $self->format_rules(), $data, \@def ) 
-    );    
+    push( @{ $self->ach_data() },
+        fixedlength( $self->format_rules(), $data, \@def )
+    );
 }
 
 #-------------------------------------------------
@@ -273,7 +288,7 @@ sub make_file_header_record {
         immediate_origin_name
         reference_code
     );
-    
+
     my $data = {
         record_type         => 1,
         priority_code       => 1,
@@ -290,8 +305,8 @@ sub make_file_header_record {
         reference_code        => '',
     };
 
-    push( @{ $self->ach_data() }, 
-        fixedlength( $self->format_rules, $data,  \@def  ) 
+    push( @{ $self->ach_data() },
+        fixedlength( $self->format_rules, $data,  \@def  )
     );
 }
 
@@ -300,27 +315,27 @@ sub make_file_header_record {
 #-------------------------------------------------
 sub sample_detail_records {
     my( $self ) = shift;
-    
+
     my @records;
 
-    push( @records, { 
-        customer_name       => 'JOHN SMITH', 
-        customer_acct       => sprintf( "%010d", '6124' ) 
-            . sprintf( "%08d", '2882282' ), 
+    push( @records, {
+        customer_name       => 'JOHN SMITH',
+        customer_acct       => sprintf( "%010d", '6124' )
+            . sprintf( "%08d", '2882282' ),
         amount              => '2501',
         routing_number      => '010010101',
         bank_account        => '103030030',
     } );
 
-    push( @records, { 
-        customer_name       => 'JOHN SMITHSTIMTIMSTIMSIMSIMS', 
-        customer_acct       => sprintf( "%010d", '4124' ) 
-                . sprintf( "%08d", '4882282' ), 
+    push( @records, {
+        customer_name       => 'JOHN SMITHSTIMTIMSTIMSIMSIMS',
+        customer_acct       => sprintf( "%010d", '4124' )
+                . sprintf( "%08d", '4882282' ),
         amount              => '40801',
         routing_number      => '010010401',
         bank_account        => '440030030',
     } );
-    
+
     return @records;
 }
 
@@ -329,9 +344,9 @@ sub sample_detail_records {
 #-------------------------------------------------
 sub format_rules {
     my( $self ) = @_;
-    
+
     return( {
-        customer_name       => '22L', 
+        customer_name       => '22L',
         customer_acct       => '15L',
         amount              => '10R*D',
         bank_2              => '2L',
@@ -341,11 +356,11 @@ sub format_rules {
         trace_num           => '15L',
         transaction_code    => '2L',
         record_type         => '1L',
-        bank_account        => '17L', 
+        bank_account        => '17L',
         routing_number      => '9R*D',
-    
+
         record_type         => '1L',
-        
+
         priority_code       => '2R*D',
         immediate_dest      => '10R',
         immediate_origin    => '10R',
@@ -358,7 +373,7 @@ sub format_rules {
         immediate_dest_name => '23L',
         immediate_origin_name => '23L',
         reference_code        => '8L',
-    
+
         service_class_code    => '3L',
         company_name          => '16L',
         company_note_data     => '20L',
@@ -370,18 +385,18 @@ sub format_rules {
         origin_status_code    => '1L',  # for bank
         origin_dfi_id         => '8L',  # for bank
         batch_number          => '7R*D',
-    
+
         entry_count           => '6R*D',
         entry_hash            => '10R*D',
         total_debit_amount    => '12R*D',
         total_credit_amount   => '12R*D',
         authen_code           => '19L',
         bank_6                => '6L',
-    
+
         batch_count            => '6R*D',
         block_count            => '6R*D',
         file_entry_count       => '8R*D',
-        bank_39                => '39L', 
+        bank_39                => '39L',
     } );
 }
 
@@ -409,7 +424,7 @@ sub _make_batch_control_record {
         record_type         => 8,
         service_class_code  => $self->{__SERVICE_CLASS_CODE__},
         company_id          => $self->{__COMPANY_ID__},
-        origin_dfi_id       => '',
+        origin_dfi_id       => $self->{__ORIGINATING_DFI__},
         batch_number        => $self->{__BATCH_COUNT__},
         authen_code         => '',
         bank_6              => '',
@@ -418,9 +433,9 @@ sub _make_batch_control_record {
         total_debit_amount  => $self->{__BATCH_TOTAL_DEBIT__},
         total_credit_amount => $self->{__BATCH_TOTAL_CREDIT__},
     };
-    
-    push( @{ $self->ach_data() }, 
-        fixedlength( $self->format_rules(), $data, \@def ) 
+
+    push( @{ $self->ach_data() },
+        fixedlength( $self->format_rules(), $data, \@def )
     );
 }
 
@@ -431,28 +446,28 @@ sub _make_detail_record {
     my( $self, $record ) = @_;
 
     my @def = qw(
-        record_type 
-        transaction_code 
-        routing_number 
-        bank_account 
-        amount 
-        customer_acct 
-        customer_name 
+        record_type
+        transaction_code
+        routing_number
+        bank_account
+        amount
+        customer_acct
+        customer_name
         transaction_type
-        addenda 
+        addenda
         bank_15
     );
-    
+
     # add to record unless already defined
     $record->{record_type}      ||= 6;
     $record->{transaction_code} ||= 27;
     $record->{transaction_type} ||= 'S';
     $record->{bank_15}          ||= '';
     $record->{addenda}          ||= 0;
-        
+
     # stash detail record
     push( @{ $self->ach_data() },
-        fixedlength( $self->format_rules(), $record, \@def ) 
+        fixedlength( $self->format_rules(), $record, \@def )
     );
 }
 
@@ -489,17 +504,25 @@ sub _make_batch_header_record {
         date                => strftime( "%y%m%d", localtime(time) ),
         effective_date      => $self->{__EFFECTIVE_DATE__},
         settlement_date     => '',
-        origin_status_code  => '',
-        origin_dfi_id       => '',
+        origin_status_code  => $self->{__ORIGIN_STATUS_CODE__},
+        origin_dfi_id       => $self->{__ORIGINATING_DFI__},
         batch_number        => $self->{__BATCH_COUNT__},
         authen_code         => '',
         bank_6              => '',
     };
-    
-    push( @{ $self->ach_data() }, 
-        fixedlength( $self->format_rules(), $data, \@def ) 
+
+    push( @{ $self->ach_data() },
+        fixedlength( $self->format_rules(), $data, \@def )
     );
 }
+
+#-------------------------------------------------
+# _is_credit(  )
+#-------------------------------------------------
+#sub _is_credit {
+    #my( $self ) = @_;
+    #return true/false
+#}
 
 sub fixedlength {
     my( $format, $data, $order ) = @_;
@@ -514,12 +537,12 @@ sub fixedlength {
          $numfmt_re
         )?
 RE
-    
+
     my $debug=0;
     my $fmt_string;
 
     foreach my $field ( @{ $order } ) {
-        
+
         if ( ! defined $format->{$field} ) {
             die( "Format for the field $field was not defined\n" );
         }
@@ -528,16 +551,16 @@ RE
             warn( "data for $field is not defined" );
             $data->{$field} = "";
         }
-           
-        if ( $format->{$field} =~ /$format_re/x ) { 
+
+        if ( $format->{$field} =~ /$format_re/x ) {
             my $width = $1;
-            
+
             my $just  = $2 || 'L';
             $just = $just eq 'L' ? '-' : '';
-                        
+
             my $text  = ( $3 || '' );
-            
-            if ( $text =~ /$int_re/i or $text =~ /$flt_re/ ) {                
+
+            if ( $text =~ /$int_re/i or $text =~ /$flt_re/ ) {
                 my $zero_fill = $1 ? '0' : '';
                 my $d_or_f    = lc $2;
 
@@ -547,34 +570,34 @@ RE
                 my $fmt = "%${just}${zero_fill}${width}${d_or_f}";
 
                 warn "num sprintf :$fmt" if $debug;
-                
+
                 my $dta = $data->{$field};
-                
+
                 # crop text
                 if ( length($dta) > $width ) {
                     $dta = substr( $dta, 0, $width );
-                }           
-                
+                }
+
                 $fmt_string .= sprintf( $fmt, $dta );
-            } 
+            }
             else {
                 my $fmt = "%${just}${width}s";
                 warn "str sprintf: $fmt" if $debug;
 
                 my $dta = $data->{$field};
-                
+
                 # crop text
                 if ( length($dta) > $width ) {
                     $dta = substr( $dta, 0, $width );
-                }           
-                                
+                }
+
                 $fmt_string .= sprintf( $fmt, $dta );
             }
 
         } # end if match format
-        
+
     } # end foreach fields
-    
+
     return $fmt_string;
 }
 # EOF
@@ -582,45 +605,45 @@ RE
 
 __END__
 
-=head1 NAME 
+=head1 NAME
 
 ACH::Builder - Tools for Building ACH (Automated Clearing House) Files
 
 =head1 SYNOPSIS
 
   use ACH::Builder;
-  
-  my $ach = ACH::Builder->new( { 
+
+  my $ach = ACH::Builder->new( {
 
       # (required) Company Identification, Fed Tax ID
       company_id        => '11-111111',
-      
+
       # (required) This will appear on the receiver's bank statement
       company_name      => 'MY COMPANY',
-       
-      # (required) a brief description of the nature of the 
+
+      # (required) a brief description of the nature of the
       # payments this will apper on the receiver's bank statement
       entry_description => 'TV-TELCOM',
 
       # (required)
       destination       => '123123123',
       destination_name  => 'COMMERCE BANK',
-      
+
       # (required)
-      origin            => '12312311',
-      origin_name       => 'MYCOMPANY',
-      
+      origination            => '12312311',
+      origination_name       => 'MYCOMPANY',
+
       # (optional)
       company_note      => 'BILL',
-      
+
       # (optional)
       effective_date    => 'yymmdd',
-        
+
   } );
 
-  # I've included some sample detail records 
+  # I've included some sample detail records
   my @samples = $ach->sample_detail_records();
-  
+
   # build file header record
   $ach->make_file_header_record();
 
@@ -636,22 +659,22 @@ ACH::Builder - Tools for Building ACH (Automated Clearing House) Files
   $ach->make_file_control_record();
 
   print $ach->to_string;
-  
+
 =head1 DESCRIPTION
 
 ACH File Structure
- 
+
 This module is tool to help construct ACH files, which are fixed width
 formatted files accpected by most banks. ACH (Automated Clearing House)
-is an electronic banking network operating system in the United States. 
-ACH processes large volumes of both credit and debit transactions which 
-are originated in batches. Rules and regulations governing the ACH network 
-are established by the National Automated Clearing House Association 
+is an electronic banking network operating system in the United States.
+ACH processes large volumes of both credit and debit transactions which
+are originated in batches. Rules and regulations governing the ACH network
+are established by the National Automated Clearing House Association
 (NACHA) and the Federal Reserve (Fed).
 
-ACH credit transfers include direct deposit payroll payments and payments 
-to contractors and vendors. ACH debit transfers include consumer payments 
-on insurance premiums, mortgage loans, and other kinds of bills. 
+ACH credit transfers include direct deposit payroll payments and payments
+to contractors and vendors. ACH debit transfers include consumer payments
+on insurance premiums, mortgage loans, and other kinds of bills.
 
 =head1 DETAIL RECORD FORMAT
 
@@ -659,8 +682,8 @@ Detail Record Format
 
 =over 4
 
- { customer_name    => 'JOHN SMITH',  
-   customer_acct    => '0000-0111111', 
+ { customer_name    => 'JOHN SMITH',
+   customer_acct    => '0000-0111111',
    amount           => '2501',
    routing_number   => '010010101'
    bank_account     => '103030030' }
@@ -673,21 +696,21 @@ Detail Record Format
 
 =item new (constructor)
 
-params: Hash Ref { company_id => '...', company_note ... }           
+params: Hash Ref { company_id => '...', company_note ... }
 
 ** set methods are also provided for these parameters
 
 =over 4
 
  service_class_code
- destination_name 
- origination_name 
- destination   
- origination      
+ destination_name
+ origination_name
+ destination
+ origination
  entry_class_code
  entry_description
- company_id  
- company_name     
+ company_id
+ company_name
  company_note
  file_id_modifier
  record_size
@@ -695,7 +718,7 @@ params: Hash Ref { company_id => '...', company_note ... }
  format_code
 
 =back
-                      
+
 =item make_file_header_record
 
 Called to create the File Header record. This should be called before
@@ -703,7 +726,7 @@ Called to create the File Header record. This should be called before
 
 =item make_file_control_record
 
-Called to create the File Control Record. This should be called after 
+Called to create the File Control Record. This should be called after
 "make_batch".
 
 =item make_batch
@@ -720,13 +743,13 @@ Hash of ACH format rules.
 =item sample_detail_records
 
 AoH of sample detail records
- 
+
 Detail Record Format
 
 =over 4
 
- { customer_name    => 'JOHN SMITH',  
-   customer_acct    => '0000-0111111', 
+ { customer_name    => 'JOHN SMITH',
+   customer_acct    => '0000-0111111',
    amount           => '2501',
    routing_number   => '010010101'
    bank_account     => '103030030' }
@@ -735,7 +758,7 @@ Detail Record Format
 
 =item to_string
 
-returns the built ACH file 
+returns the built ACH file
 
 =back
 
@@ -746,7 +769,7 @@ returns the built ACH file
 =item set_service_class_code
 
 =item set_destination_name
-      
+
 =item set_destination
 
 =item set_origination_name
@@ -768,14 +791,14 @@ returns the built ACH file
 =item set_record_size
 
 =item set_format_code
-        
+
 =back
 
 =head1 NOTES
 
 ACH File structure.
 
- File Header 
+ File Header
    Batch Header
      Entries
    Batch Control
@@ -792,8 +815,13 @@ Only supports the ACH format.
 
 Tim Keefer <tkeefer@gmail.com>
 
+=head1 CONTRIBUTOR
+
+Cameron Baustian <cameronbaustian@gmail.com>
+
 =head1 COPYRIGHT
 
 Tim Keefer
+Cameron Baustian
 
 =cut
