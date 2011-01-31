@@ -1,5 +1,5 @@
 Revision history for Perl extension ACH-Builder.
-0.08  Fri Jan 28 11:36:14 CST 2010
+0.09  Fri Jan 28 11:36:14 CST 2010
     - allowed originating dfi code
     - allowed switch between credits and debits
     - fixed computation of batch and file totals

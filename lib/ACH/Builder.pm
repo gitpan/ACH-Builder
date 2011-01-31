@@ -5,7 +5,7 @@ use warnings;
 
 use POSIX qw( strftime );
 
-our $VERSION = '0.08';
+our $VERSION = '0.09';
 
 #-------------------------------------------------
 # new( $file ? )
@@ -822,6 +822,7 @@ Cameron Baustian <cameronbaustian@gmail.com>
 =head1 COPYRIGHT
 
 Tim Keefer
+
 Cameron Baustian
 
 =cut
