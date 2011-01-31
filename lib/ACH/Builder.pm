@@ -5,7 +5,7 @@ use warnings;
 
 use POSIX qw( strftime );
 
-our $VERSION = '0.06';
+our $VERSION = '0.07';
 
 #-------------------------------------------------
 # new( $file ? )
