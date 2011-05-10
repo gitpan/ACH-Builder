@@ -5,7 +5,7 @@ use warnings;
 
 use POSIX qw( strftime );
 
-our $VERSION = '0.09';
+our $VERSION = '0.10';
 
 #-------------------------------------------------
 # new( $file ? )
@@ -200,19 +200,21 @@ sub make_batch {
     # loop over the detail records
     foreach my $record ( @{ $records } ) {
 
-        if ($record->{transaction_code} == 27) {
+        die 'amount cannot be negative' if $record->{amount} < 0;
+
+        if ($record->{transaction_code} =~ /^(27|37)$/) {
            #if it is a debit
            $self->{__BATCH_TOTAL_DEBIT__} += $record->{amount};
            $self->{__DEBIT_AMOUNT__} += $record->{amount};
-           #FIXME did he just put it in the wrong place?
            $self->{__TOTAL_DEBIT__} += $record->{amount};
 
-        } elsif ($record->{transaction_code} == 22) {
+        } elsif ($record->{transaction_code} =~ /^(22|32)$/ ) {
            #if it is a credit
            $self->{__BATCH_TOTAL_CREDIT__} += $record->{amount};
            $self->{__CREDIT_AMOUNT__} += $record->{amount};
-           #FIXME did he just put it in the wrong place?
            $self->{__TOTAL_CREDIT__} += $record->{amount};
+        } else {
+           die 'unsupported transaction_code';
         }
 
         # modify batch values
@@ -817,12 +819,11 @@ Tim Keefer <tkeefer@gmail.com>
 
 =head1 CONTRIBUTOR
 
-Cameron Baustian <cameronbaustian@gmail.com>
+Cameron Baustian <camerb@cpan.org>
 
 =head1 COPYRIGHT
 
 Tim Keefer
-
 Cameron Baustian
 
 =cut

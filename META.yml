@@ -1,6 +1,6 @@
 --- #YAML:1.0
 name:               ACH-Builder
-version:            0.09
+version:            0.10
 abstract:           Tools for Building ACH (Automated Clearing House) Files
 author:
     - Tim Keefer <tkeefer@gmail.com>
